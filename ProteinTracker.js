@@ -1,24 +1,64 @@
 
-Users = new Meteor.Collection('protein_data');
+ProteinData = new Meteor.Collection('protein_data');
 History = new Meteor.Collection('history');
+
+ProteinData.allow({
+  insert: function(userId,data){
+    if (data.userId == userId)
+      return true;
+    return false;
+  }
+});
+
+Meteor.methods({
+  addProtein: function(amount){
+    ProteinData.update({userId: this.userId},{$inc:{total: amount}});
+
+    History.insert({
+      value: amount,
+      date: new Date().toTimeString(),
+      userId: this.userId
+    });
+  }
+});
 
 
 if (Meteor.isClient) {
   // Subscribe to
 
-  Meteor.subscribe('allUsers');
+  Meteor.subscribe('allProteinData');
   Meteor.subscribe('allHistory');
+
+  Deps.autorun(function(){
+    if (Meteor.user())
+      console.log("User logged in: " + Meteor.user().profile.name);
+    else
+      console.log("User logged out!");
+  });
 
 
   Template.userDetails.helpers({
     user: function(){
-      return Users.findOne();
+      var data = ProteinData.findOne();
+      if (!data){
+        data = {
+          userId: Meteor.userId(),
+          total: 0,
+          goal: 200
+        };
+        ProteinData.insert(data);
+
       }
+      return data;
+    },
+    lastAmount : function(){
+      return Session.get('lastAmount');
+    }
   });
 
   Template.history.helpers({
     historyItem: function(){
-      return History.find({},{sort: {date: -1}, limit: 5});
+      return History.find({},{sort: {date: -1}});
     }
 
   });
@@ -27,60 +67,30 @@ if (Meteor.isClient) {
     'click #addAmount' : function(e){
       e.preventDefault();
       var amount = parseInt($('#amount').val());
-      Users.update(this._id,{$inc:{total: amount}});
 
-      History.insert({
-        value: amount,
-        date: new Date().toTimeString(),
-        userId: this._id
+      Meteor.call('addProtein',amount,function(error,id){
+        if(error)
+          return alert("ERROR: Add Protein : " + error.reason);
       });
+
+      Session.set('lastAmount',amount);
     }
   });
 
 }
 
 if (Meteor.isServer) {
-  Meteor.publish('allUsers',function(){
-    return Users.find();
+  Meteor.publish('allProteinData',function(){
+    return ProteinData.find({userId: this.userId});
   });
 
   Meteor.publish('allHistory',function(){
-    return History.find();
+    return History.find({userId: this.userId},{sort: {date: -1},limit: 5});
   });
 
 
   Meteor.startup(function () {
-    if (Users.find().count()===0){
-      Users.insert({
-        total: 120,
-        goal: 200
-      });
-    }
-    if (History.find().count() ===0){
-      History.insert({
-        value: 50,
-        date: new Date().toTimeString()
-      });
 
-      History.insert({
-        value: 30,
-        date: new Date().toTimeString()
-      });
-
-      History.insert({
-        value: 40,
-        date: new Date().toTimeString()
-      });
-
-      History.insert({
-        value: 20,
-        date: new Date().toTimeString()
-      });
-      History.insert({
-        value: 10,
-        date: new Date().toTimeString()
-      });
-    }
 
       Accounts.loginServiceConfiguration.remove({
         service: "google"
